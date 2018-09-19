@@ -80,7 +80,8 @@ namespace FaceMatch
             new System.Net.Http.DelegatingHandler[] { });
 
         IList<DetectedFace> faceList;   // The list of detected faces.
-
+        String[] faceDescriptions;      // The list of descriptions for the detected faces.
+        double resizeFactor;            // The resize factor for the displayed image.
 
         public MainPage()
         {
@@ -154,10 +155,45 @@ namespace FaceMatch
             faceList = await UploadAndDetectFaces();
             if (faceList.Count > 0)
             {
+                IList<Guid?> faceIds = faceList.Select(face => face.FaceId).ToList();
+                string personGroupId = "773c8334-b073-46ea-b888-fa35f32f66d2";
+                var results = await faceClient.Face.IdentifyAsync(personGroupId, faceIds.Cast<Guid>().ToList());
+                bool foundDracula = false;
+                bool foundNigel = false;
+
+                foreach (var identifyResult in results)
+                {
+                    var candidateArray = identifyResult.Candidates.ToArray();
+                    if (candidateArray.Length > 0)
+                    {
+                        var candidateId = candidateArray[0].PersonId;
+                        var person = await faceClient.PersonGroupPerson.GetAsync(personGroupId, candidateId);
+                        if (person.Name == "Dracula") { 
+                            foundDracula = true;
+                        }
+                        else if (person.Name == "Nigel")
+                        {
+                            foundNigel = true;
+                        }
+                    }
+                }
+
                 if (faceList.Count==1)
                 {
                     CurrentFrameImage.Visibility = Visibility.Collapsed;
-                    String spkstr = String.Format("I see a {0} year old {1}{2}", faceList[0].FaceAttributes.Age, faceList[0].FaceAttributes.Gender, ((faceList[0].FaceAttributes.Smile==1)?" looking happy":""));
+                    String spkstr = "";
+                    if (foundDracula)
+                    {
+                        spkstr = "I see a person wearing a Dracula mask";
+
+                    }
+                    else if (foundNigel)
+                    {
+                        spkstr = spkstr = String.Format("Hi Nigel, today you look {0} years old. {2}", faceList[0].FaceAttributes.Age, faceList[0].FaceAttributes.Gender, ((faceList[0].FaceAttributes.Smile == 1) ? " smiling makes you look older" : ""));
+                    }
+                    else { 
+                        spkstr = String.Format("I see a {0} year old {1}{2}", faceList[0].FaceAttributes.Age, faceList[0].FaceAttributes.Gender, ((faceList[0].FaceAttributes.Smile==1)?" looking happy":""));
+                    }
                     await this.SpeakTextAsync(spkstr, this.uiMediaElement);
                     
                 }
