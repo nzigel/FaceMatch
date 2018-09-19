@@ -25,6 +25,7 @@ using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
+// code based on this tutorial https://docs.microsoft.com/en-us/azure/cognitive-services/Face/Tutorials/FaceAPIinCSharpTutorial
 
 namespace FaceMatch
 {
@@ -71,7 +72,7 @@ namespace FaceMatch
         private SoftwareBitmapSource _softwareBitmapSource;
         private SoftwareBitmap _softwareBitmap;
 
-        private const string subscriptionKey = "";
+        private const string subscriptionKey = ""; //put your cognitive services face api key in here
         private const string baseUri =
             "https://westus.api.cognitive.microsoft.com/face/v1.0";
 
@@ -80,8 +81,6 @@ namespace FaceMatch
             new System.Net.Http.DelegatingHandler[] { });
 
         IList<DetectedFace> faceList;   // The list of detected faces.
-        String[] faceDescriptions;      // The list of descriptions for the detected faces.
-        double resizeFactor;            // The resize factor for the displayed image.
 
         public MainPage()
         {
@@ -156,10 +155,14 @@ namespace FaceMatch
             if (faceList.Count > 0)
             {
                 IList<Guid?> faceIds = faceList.Select(face => face.FaceId).ToList();
+                // call https://westus.api.cognitive.microsoft.com/face/v1.0/persongroups to get a list of person groups
+                // use the Intelligent Kiosk from the windows store to create a person group https://www.microsoft.com/store/apps/9nblggh5qd84 
                 string personGroupId = "773c8334-b073-46ea-b888-fa35f32f66d2";
                 var results = await faceClient.Face.IdentifyAsync(personGroupId, faceIds.Cast<Guid>().ToList());
                 bool foundDracula = false;
                 bool foundNigel = false;
+                bool foundIndigo = false;
+                bool foundGrandma = false;
 
                 foreach (var identifyResult in results)
                 {
@@ -168,20 +171,27 @@ namespace FaceMatch
                     {
                         var candidateId = candidateArray[0].PersonId;
                         var person = await faceClient.PersonGroupPerson.GetAsync(personGroupId, candidateId);
-                        if (person.Name == "Dracula") { 
+                        if (person.Name == "Dracula") {
                             foundDracula = true;
                         }
                         else if (person.Name == "Nigel")
                         {
                             foundNigel = true;
                         }
+                        else if (person.Name == "Indigo")
+                        {
+                            foundIndigo = true;
+                        }
+                        else if (person.Name == "Grandma")
+                        {
+                            foundGrandma = true;
+                        }
                     }
                 }
 
-                if (faceList.Count==1)
+                String spkstr = "";
+                if (faceList.Count == 1)
                 {
-                    CurrentFrameImage.Visibility = Visibility.Collapsed;
-                    String spkstr = "";
                     if (foundDracula)
                     {
                         spkstr = "I see a person wearing a Dracula mask";
@@ -191,13 +201,33 @@ namespace FaceMatch
                     {
                         spkstr = spkstr = String.Format("Hi Nigel, today you look {0} years old. {2}", faceList[0].FaceAttributes.Age, faceList[0].FaceAttributes.Gender, ((faceList[0].FaceAttributes.Smile == 1) ? " smiling makes you look older" : ""));
                     }
-                    else { 
-                        spkstr = String.Format("I see a {0} year old {1}{2}", faceList[0].FaceAttributes.Age, faceList[0].FaceAttributes.Gender, ((faceList[0].FaceAttributes.Smile==1)?" looking happy":""));
+                    else {
+                        spkstr = String.Format("I see a {0} year old {1}{2}", faceList[0].FaceAttributes.Age, faceList[0].FaceAttributes.Gender, ((faceList[0].FaceAttributes.Smile == 1) ? " looking happy" : ""));
                     }
-                    await this.SpeakTextAsync(spkstr, this.uiMediaElement);
-                    
                 }
-                
+                else if ((faceList.Count >= 2) && (foundDracula) && (foundNigel))
+                {
+                    spkstr = String.Format("Hi Nigel, why are you holding that Dracula mask?");
+                }
+                else if ((faceList.Count >= 2) && (foundDracula) && (!foundNigel))
+                {   // hack that assumes the mask is the second face it sees I haven't written the code to match the faceList with person names yet.
+                    spkstr = String.Format("I see a {0} year old {1}{2} holding a Dracula mask.", faceList[1].FaceAttributes.Age, faceList[1].FaceAttributes.Gender, ((faceList[1].FaceAttributes.Smile == 1) ? " looking happy," : ""));
+                }
+                else if ((faceList.Count >= 3) && (foundIndigo) && (foundGrandma) && (foundNigel))
+                {
+                    // hack that looks for the youngest person in the picture. I haven't written code to match people to faces yet.
+                    double? minAge = 100;
+                    foreach(var p in faceList)
+                    {
+                        if (p.FaceAttributes.Age < minAge)
+                        {
+                            minAge = p.FaceAttributes.Age;
+                        }
+                    }
+                    spkstr = String.Format("Hi Nigel, that is a nice photograph of Indigo and Grandma. Indigo looks like she was {0}{1} when this was taken.", minAge, ((minAge==1)? "year old": "years old"));
+                }
+                CurrentFrameImage.Visibility = Visibility.Collapsed;
+                await this.SpeakTextAsync(spkstr, this.uiMediaElement);
             }
         }
 
